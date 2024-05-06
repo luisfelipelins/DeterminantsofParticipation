@@ -1,0 +1,4 @@
+* Local Unemployment from Local Area Unemployment Statistics (LAUS), BLS: https://www.bls.gov/lau/tables.htm#cntyaa
+* State Level JOLTS from BLS: https://download.bls.gov/pub/time.series/jt
+* County Level Health Statistics from CHR&R/University of Wiscosin: https://www.countyhealthrankings.org/health-data/methodology-and-sources/data-documentation/national-data-documentation-2010-2022
+* 

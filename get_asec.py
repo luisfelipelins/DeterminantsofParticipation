@@ -59,6 +59,7 @@ def downloadDataFromASEC(year_begin,tickers,vars_list,flags_all,col_names):
         data = data.rename(columns = col_names)
 
         dict_asec.update({year:data})
+        time.sleep(10)
     
     return dict_asec
 
@@ -76,8 +77,8 @@ if __name__ == '__main__':
     col_names.set_index('Ticker',inplace=True)
     col_names = col_names.to_dict()['Rename']
     
-    vars_list = getVariablesList(year_begin=1992)
-    asec_data = downloadDataFromASEC(year_begin=1992, tickers=tickers, vars_list=vars_list, flags_all=flags_all, col_names=col_names)
+    vars_list = getVariablesList(year_begin=2001)
+    asec_data = downloadDataFromASEC(year_begin=2001, tickers=tickers, vars_list=vars_list, flags_all=flags_all, col_names=col_names)
     
     with open(f'{path}/Data/input/asec_raw.p','wb') as f:
         pickle.dump(asec_data,f)
