@@ -13,8 +13,6 @@ import pandas as pd
 from tqdm import tqdm
 from datetime import datetime as dt
 
-os.environ['CENSUS_API_KEY'] = 'ea5c9a84ce17ee355946962d82be96d2685f7bc8'
-
 def getVariablesList(year_begin):
     dict_asec = {}
     tqdm_obj = tqdm(range(year_begin,dt.now().year))
@@ -65,6 +63,7 @@ def downloadDataFromASEC(year_begin,tickers,vars_list,flags_all,col_names):
 
 if __name__ == '__main__':
     path = r'C:/Users/lfval/OneDrive\Documentos\FGV\Monografia\DeterminantsofParticipation'
+    os.environ['CENSUS_API_KEY'] = open(f'{path}/config/api_key.txt','r').read()
     spec = pd.read_excel(f'{path}/config/spec.xlsx','asec')
     tickers = [x.lower() for x in spec['Ticker'].to_list()]
     

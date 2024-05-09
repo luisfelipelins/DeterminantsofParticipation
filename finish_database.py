@@ -109,11 +109,12 @@ def addDatasettoASEC(asec_dict,dataset_dict,geo_level):
             case 'state':
                 new_asec = pd.merge(data, asec, on='state', how='inner')
             case 'county':
-                new_asec = pd.merge(data, asec, on='fipscode', how='inner')
+                if year not in [2001,2002,2003,2004]:
+                    new_asec = pd.merge(data, asec, on='fipscode', how='inner')
             case _:
                 raise ValueError(f'{geo_level} geo level not supported.')
-                
-        new_asec_dict[year] = new_asec
+        if year not in [2001,2002,2003,2004]:
+            new_asec_dict[year] = new_asec
         
     return new_asec_dict
             
@@ -191,6 +192,6 @@ if __name__ == '__main__':
     
     asec_dict = addDatasettoASEC(asec_dict,jolts_dict ,'state')
     asec_dict = addDatasettoASEC(asec_dict,unemp_dict ,'county')
-    asec_dict = addDatasettoASEC(asec_dict,health_dict,'state')
+    asec_dict = addDatasettoASEC(asec_dict,health_dict,'county')
     
     
