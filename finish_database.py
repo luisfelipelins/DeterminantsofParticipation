@@ -71,9 +71,17 @@ def getCountyUnemployment():
         temp = temp.apply(lambda x: pd.to_numeric(x,errors='coerce'))
         temp.rename(columns={'Code.1':'State',
                              'Code.2':'County'},inplace=True)
+        
+        state_mean = temp.groupby('State').mean()
+        state_mean['County'] = 0
+        state_mean['County_URate'] = state_mean['Unemployed'].div(state_mean['Force'])
+        state_mean.reset_index(inplace=True)
+        
         temp['County_URate'] = temp['Unemployed'].div(temp['Force'])
+        temp = pd.concat([temp,state_mean])
+        
         temp = temp.drop(['Force','Unemployed'],axis=1)
-        temp['fipscode'] = temp['State'].astype(int).astype(str) + temp['County'].astype(int).astype(str)
+        temp['fipscode'] = temp['State'].astype(int).astype(str).str.zfill(2) + temp['County'].astype(int).astype(str).str.zfill(3)
         county_unemployment.update({temp['Year'].astype(int).iloc[0]:temp[['fipscode','County_URate']]})
     
     return county_unemployment
@@ -88,8 +96,8 @@ def getCountyHealthData():
         cols = ['statecode','countycode','v001_rawvalue','v011_rawvalue','v049_rawvalue','v014_rawvalue','v155_rawvalue','v136_rawvalue','v137_rawvalue','v138_rawvalue','v015_rawvalue']
         cols = [i for i in cols if i in temp.columns]
         temp = temp[cols]
-        temp['fipscode'] = temp['statecode'].astype(str) + temp['countycode'].astype(str)
-        temp = temp.loc[temp['fipscode'] != '00']
+        temp['fipscode'] = temp['statecode'].astype(str).str.zfill(2) + temp['countycode'].astype(str).str.zfill(3)
+        temp = temp.loc[temp['fipscode'] != '00000']
         health_data.update({int(file[-8:-4]):temp[['fipscode']+cols[2:]]})
     
     return health_data
@@ -127,8 +135,9 @@ def adjustingASECDict(asec_dict):
         
         # Selecting only individuals with county available & creating FIPS code county
         if 'county' in cols:
-            temp = temp.loc[temp['county'] != 0]
-            temp['fipscode'] = temp['state'].astype(int).astype(str) + temp['county'].astype(int).astype(str)
+            # temp = temp.loc[temp['county'] != 0]
+            temp['fipscode'] = temp['state'].astype(int).astype(str).str.rjust(2,'0') + temp['county'].astype(int).astype(str).str.rjust(3,'0')
+            temp = temp.drop('county',axis=1)
         
         # Creating US national/non-US national variable
         if 'citizenship' in cols:
@@ -139,12 +148,13 @@ def adjustingASECDict(asec_dict):
             temp['educ_hs'] = np.where(temp['educ'] == 39, 1,0)
             temp['educ_college'] = np.where((temp['educ'] >= 40) & (temp['educ'] <= 43), 1,0)
             temp['educ_post_grad']  = np.where(temp['educ'] >= 44, 1,0)
+            temp = temp.drop('educ',axis=1)
         
         # Creating categorical industry variable
         if 'industry' in cols:
             temp = pd.concat([temp,pd.get_dummies(temp['industry'], prefix='industry').astype(int)],axis=1).drop('industry',axis=1)
     
-        # Create born country
+        # Create born country, if 1 in the US
         if 'origin_country' in cols:
             temp['origin_country'] = np.where(temp['origin_country'] == 57,1,0)
         if 'origin_country_father' in cols:
@@ -175,6 +185,7 @@ def adjustingASECDict(asec_dict):
     
         # Creating labour force status variable
         if 'lf_status' in cols:
+            temp = temp.loc[temp['lf_status'] > 0]
             temp['lf_status'] = np.where(temp['lf_status'] != 7,1,0)
         
         asec_dict[i] = temp
@@ -194,4 +205,5 @@ if __name__ == '__main__':
     asec_dict = addDatasettoASEC(asec_dict,unemp_dict ,'county')
     asec_dict = addDatasettoASEC(asec_dict,health_dict,'county')
     
-    
+    with open(f'{path}/Data/input/data_final.p','wb') as f:
+        pickle.dump(asec_dict,f)

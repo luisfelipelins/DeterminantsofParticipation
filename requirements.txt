@@ -1,0 +1,16 @@
+numpy==1.26.4
+pandas==2.1.4
+pycpsdata==1.0.1
+tqdm==4.65.0
+scipy==1.11.4
+seaborn==0.12.2
+PyYAML==6.0.1
+openpyxl==3.0.10
+matplotlib==3.8.0
+statsmodels==0.14.0
+plotly==5.22.0
+nbformat==5.10.4
+ipykernel==6.29.4
+geodatasets==2023.12.0
+descartes==1.1.0
+shapely==1.8.1
