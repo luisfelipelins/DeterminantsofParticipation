@@ -18,6 +18,23 @@ import matplotlib.ticker as mtick
 import seaborn as sns
 from statsmodels.stats.descriptivestats import describe
 from tqdm import tqdm
+from fred import Fred
+import ast
+from scipy.stats import pearsonr
+from statsmodels.regression.linear_model import OLS
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import export_graphviz
+from sklearn.model_selection import train_test_split
+
+def importFred(fr,ticker,name):
+    data = fr.series.observations(ticker)
+    data = [pd.Series(i) for i in ast.literal_eval(data)['observations']]
+    data = pd.concat(data,axis=1).T
+    data['date']  = pd.to_datetime(data['date'])
+    data['value'] = pd.to_numeric(data['value'], errors='coerce')
+    data = data.set_index('date')['value'].rename(name).dropna()
+    
+    return data
 
 def calcParticipationbyCounty(data_dict):
     return_df = []
@@ -31,6 +48,20 @@ def calcParticipationbyCounty(data_dict):
             return_df.append(part_county)
     return_df = pd.concat(return_df,axis=1)
 
+    return return_df
+
+def calcCorrelationtoParticipation(data_dict,var):
+    return_df = {}    
+    for df in data_dict:
+        if var in data_dict[df].columns:
+            corr = pearsonr(data_dict[df]['lf_status'],data_dict[df][var])
+            val  = corr.correlation
+            lb   = corr.confidence_interval(confidence_level=0.95)[0]
+            ub   = corr.confidence_interval(confidence_level=0.95)[1]
+            corr = {'Correlation':val,'LB':lb,'UB':ub}
+            return_df.update({df:corr})
+        else: pass
+    return_df = pd.DataFrame.from_dict(return_df)
     return return_df
     
 def getCountyPolygons():
@@ -50,17 +81,151 @@ def plotCountyMapData(data,year,polyg):
     # polyg_new['data'] = polyg_new['data'].fillna(polyg['state_fips'].map(state))
     
     return polyg_new
-    
 
 
 if __name__ == '__main__':
     path = r'C:/Users/lfval/OneDrive\Documentos\FGV\Monografia\DeterminantsofParticipation'
+    fr = Fred(api_key=open(f'{path}/config/fred_api_key.txt','r').read(),response_type='json')
     with open(f'{path}/Data/input/data_final.p','rb') as f:
         data_dict = pickle.load(f)
         
     desc_stats_dict = {}
     for y in tqdm(data_dict):
         desc_stats_dict.update({y:describe(data_dict[y])})
+        
+    ##################
+    ## Correlations ##
+    ##################
+    job_openings = calcCorrelationtoParticipation(data_dict,'JO').T
+    origin_cnty  = calcCorrelationtoParticipation(data_dict,'origin_country').T
+    female       = calcCorrelationtoParticipation(data_dict,'female').T
+    soc_secrty   = calcCorrelationtoParticipation(data_dict,'d@social_security').T
+    overdose     = calcCorrelationtoParticipation(data_dict,'v138_rawvalue').T
+    age          = calcCorrelationtoParticipation(data_dict,'age').T
+    
+    fig,ax=plt.subplots(ncols=3,nrows=2,figsize=(14,5))
+    
+    i,j=(0,0)
+    for df,name in zip([job_openings,origin_cnty,female,soc_secrty,overdose,age],['Job Openings','American National','Female Dummy','Social Security Income','Overdose Deaths','Age']):
+        df.index = pd.to_datetime(df.index,format='%Y')+pd.offsets.YearEnd()
+        ax[i,j].plot(df['Correlation'],color='darkblue',marker='.',label='Pearson Correlation')
+        ax[i,j].fill_between(x=df.index,y1=df['LB'],y2=df['UB'],color='darkblue',alpha=0.2,label='95% C.I.')
+        if (i==0) & (j==0):
+            ax[i,j].legend(loc=0)
+        ax[i,j].yaxis.set_major_formatter(mtick.PercentFormatter(1))
+        ax[i,j].grid(linestyle=':')
+        ax[i,j].set_title(name,fontweight='bold')
+        ax[i,j].axhline(0,color='grey',linestyle='--')
+        
+        if j>1:
+            i+=1
+            j=0
+        else:
+            j+=1
+    plt.tight_layout()
+    
+    ####################
+    ## Income Sources ##
+    ####################
+    pce_prices      = importFred(fr,'PCEPI','PCE Prices')/100
+    
+    personal_income = importFred(fr,'PI','Personal Income').div(pce_prices)
+    comp_employees  = importFred(fr,'W209RC1','Compensation of Employees').div(pce_prices).div(personal_income)
+    inc_assets      = importFred(fr,'PIROA','Income from Assets').div(pce_prices).div(personal_income)
+    inc_receipts    = importFred(fr,'PCTR','Income from Current Transfer').div(pce_prices).div(personal_income)
+   
+    fig,ax=plt.subplots(ncols=3,figsize=(14,5))
+    ax[0].plot(comp_employees,color='darkblue',label='Compensation of Employees')
+    ax[0].set_title('Compensation of Employees',fontweight='bold',loc='left')
+    ax[0].yaxis.set_major_formatter(mtick.PercentFormatter(1))
+    ax[0].grid(linestyle='--')
+    ax[1].plot(inc_assets,color='darkgreen',label='Income from Assets')
+    ax[1].set_title('Income from Assets',fontweight='bold',loc='left')
+    ax[1].yaxis.set_major_formatter(mtick.PercentFormatter(1))
+    ax[1].grid(linestyle='--')
+    ax[2].plot(inc_receipts,color='red')
+    ax[2].set_title('Income from Current Transfers',fontweight='bold',loc='left')
+    ax[2].yaxis.set_major_formatter(mtick.PercentFormatter(1))
+    ax[2].grid(linestyle='--')
+    
+    ###########################
+    ## Fit Illustrative Tree ##
+    ###########################
+    y2023 = data_dict[2023].drop(['fipscode','ind_weight','industry'],axis=1)
+    X = y2023.drop('lf_status',axis=1)
+    y = y2023['lf_status']
+    tree_reg = DecisionTreeClassifier(max_depth=2).fit(X,y)
+    tree_reg.score(X,y)
+    
+    export_graphviz(tree_reg,feature_names=X.columns,class_names=True,out_file='tree.dot')
+    # Use dot -Tpng tree.dot -o tree.png in cmd to generate .png
+    
+    #############################################
+    ## Soc Sec & Dividends Income Distribution ##
+    #############################################
+    y2007 = data_dict[2007][['hh_income_social_security','hh_income_dividends']]
+    y2010 = data_dict[2010][['hh_income_social_security','hh_income_dividends']]
+    y2019 = data_dict[2019][['hh_income_social_security','hh_income_dividends']]
+    y2023 = data_dict[2023][['hh_income_social_security','hh_income_dividends']]
+    
+    fig,ax=plt.subplots(nrows=2,figsize=(14,7))
+    sns.kdeplot(y2007['hh_income_social_security'], fill=True,ax=ax[0], label='2007')
+    sns.kdeplot(y2010['hh_income_social_security'], fill=True,ax=ax[0], label='2010')
+    sns.kdeplot(y2019['hh_income_social_security'], fill=True,ax=ax[0], label='2019')
+    sns.kdeplot(y2023['hh_income_social_security'], fill=True,ax=ax[0], label='2023')
+    ax[0].legend(loc=0)
+    ax[0].set_xlim([-10000,10000])
+    ax[0].set_title('Income from Social Security',fontweight='bold',loc='left')
+    ax[0].set_xlabel('')
+    
+    sns.kdeplot(y2007['hh_income_dividends'], fill=True,ax=ax[1], label='2007')
+    sns.kdeplot(y2010['hh_income_dividends'], fill=True,ax=ax[1], label='2010')
+    sns.kdeplot(y2019['hh_income_dividends'], fill=True,ax=ax[1], label='2019')
+    sns.kdeplot(y2023['hh_income_dividends'], fill=True,ax=ax[1], label='2023')
+    ax[1].legend(loc=0)
+    ax[1].set_xlim([-10000,10000])
+    ax[1].set_title('Income from Dividends',fontweight='bold',loc='left')
+    ax[1].set_xlabel('')
+    plt.tight_layout()
+    
+        
+    #####################################
+    ## US Aggregate Participation Rate ##
+    #####################################
+    data  = importFred(fr,'CIVPART','US Participation Rate')/100
+    men   = importFred(fr,'LNS11300001','Males (All ages)')/100
+    women = importFred(fr,'LNS11300002','Females (All ages)')/100
+    
+    fig,ax=plt.subplots(ncols=2,figsize=(14,5))
+    ax[0].plot(data, color = 'black',zorder=10)
+    ax[0].grid(linestyle='--')
+    ax[0].yaxis.set_major_formatter(mtick.PercentFormatter(1))
+    ax[0].set_title(f'US Monthly Agg. Part. Rate',fontweight='bold',loc='left')
+    
+    ax[1].plot(men, color = 'darkblue',zorder=10, label = 'Males (All ages)')
+    ax[1].plot(women, color = 'red',zorder=10, label = 'Females (All ages)')
+    ax[1].grid(linestyle='--')
+    ax[1].yaxis.set_major_formatter(mtick.PercentFormatter(1))
+    ax[1].set_title(f'Part. Rate by Sex',fontweight='bold',loc='left')
+    ax[1].legend(loc=0)
+    
+    #####################################
+    ## Participation Rate by Age Group ##
+    #####################################
+    lfpr1619 = importFred(fr,'LNS11300012','16-19y')/100
+    lfpr2024 = importFred(fr,'LNS11300036','20-24y')/100
+    lfpr2554 = importFred(fr,'LNS11300060','25-54y')/100
+    lfpr55   = importFred(fr,'LNS11324230','55+y')/100
+    
+    fig,ax=plt.subplots(ncols=1,figsize=(14,5))
+    ax.plot(lfpr1619, color = 'darkblue', label = '16-19y')
+    ax.plot(lfpr2024, color = 'lightblue', label = '20-24y')
+    ax.plot(lfpr2554, color = 'red', label = '25-54y')
+    ax.plot(lfpr55, color = 'green', label = '55+y')
+    ax.grid(linestyle='--')
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(1))
+    ax.legend(loc=0)
+    ax.set_title(f'Participation Rate by Age Group',fontweight='bold',loc='left')
     
     #############################################
     ## Ploting overall participation evolution ##
@@ -327,3 +492,28 @@ if __name__ == '__main__':
     ax[1,1].set_title('55+ years old',fontweight='bold',loc='left')
     
     plt.tight_layout()
+
+    #########################
+    ## Confounding Example ##
+    #########################
+    y23 = data_dict[2023]    
+    
+    pension   = y23['amount_received_pension']
+    lf_status = y23['lf_status']
+    fig,ax=plt.subplots(figsize=(10,5))
+    sns.scatterplot(x=pension,y=lf_status,ax=ax,color='grey')
+    mod = OLS(lf_status,pension).fit()
+    yvals = ax.get_xticks() * mod.params[0]
+    ax.plot(ax.get_xticks(),yvals,color='darkblue')
+    ax.set_ylim([-0.2,1.2])
+    ax.set_xlim([-1000,40000])
+    ax.set_ylabel('Participation in the Labour Market Dummy')    
+    ax.set_xlabel('Amount Received in Pension')
+    ax.grid(linestyle='--')
+    ax.set_title('Univariate Regression of Labour Force Participation on Pension Income',fontweight='bold',loc='left')
+    
+    mod.summary()
+    y23.loc[y23['female'] == 1]['amount_received_pension'].mean()
+    y23.loc[y23['female'] == 0]['amount_received_pension'].mean()
+    
+    

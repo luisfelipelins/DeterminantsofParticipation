@@ -150,10 +150,16 @@ def adjustingASECDict(asec_dict):
             temp['educ_post_grad']  = np.where(temp['educ'] >= 44, 1,0)
             temp = temp.drop('educ',axis=1)
         
-        # Creating categorical industry variable
-        if 'industry' in cols:
-            temp = pd.concat([temp,pd.get_dummies(temp['industry'], prefix='industry').astype(int)],axis=1).drop('industry',axis=1)
-    
+        # Comment because only people in labour force have industry
+        # # Creating categorical industry variable
+        # if 'industry' in cols:
+        #     temp = pd.concat([temp,pd.get_dummies(temp['industry'], prefix='industry').astype(int)],axis=1).drop('industry',axis=1)
+            
+        # Creating categorical industry most worked variable
+        if 'industry_most_time_employed' in cols:
+            temp = pd.concat([temp,pd.get_dummies(temp['industry_most_time_employed'], prefix='industry_most_time_employed').astype(int)],axis=1).drop('industry_most_time_employed',axis=1)
+            temp = temp.drop('industry_most_time_employed_23',axis=1)
+            
         # Create born country, if 1 in the US
         if 'origin_country' in cols:
             temp['origin_country'] = np.where(temp['origin_country'] == 57,1,0)
@@ -187,6 +193,18 @@ def adjustingASECDict(asec_dict):
         if 'lf_status' in cols:
             temp = temp.loc[temp['lf_status'] > 0]
             temp['lf_status'] = np.where(temp['lf_status'] != 7,1,0)
+            
+        # Creating the dummies (currently 1 or 2)
+        if any(['d@' in i for i in cols]):
+            dummies = [i for i in cols if 'd@' in i]
+            for d in dummies:
+                temp[d] = temp[d].replace(0,np.nan).replace(2,0)
+                
+        if 'sex' in cols:
+            temp['female'] = temp['sex'] - 1
+            temp = temp.drop('sex',axis=1)
+            
+        
         
         asec_dict[i] = temp
     

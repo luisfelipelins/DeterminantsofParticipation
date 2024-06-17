@@ -63,7 +63,7 @@ def downloadDataFromASEC(year_begin,tickers,vars_list,flags_all,col_names):
 
 if __name__ == '__main__':
     path = r'C:/Users/lfval/OneDrive\Documentos\FGV\Monografia\DeterminantsofParticipation'
-    os.environ['CENSUS_API_KEY'] = open(f'{path}/config/api_key.txt','r').read()
+    os.environ['CENSUS_API_KEY'] = open(f'{path}/config/bls_api_key.txt','r').read()
     spec = pd.read_excel(f'{path}/config/spec.xlsx','asec')
     tickers = [x.lower() for x in spec['Ticker'].to_list()]
     
