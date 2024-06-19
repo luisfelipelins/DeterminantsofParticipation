@@ -25,9 +25,9 @@ import time
 
 class MLModelsEstimation:
     
-    def __init__(self, X,y, test_size):
+    def __init__(self,X,y,test_size,random_seed=87):
         
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
+        X_train, X_test, y_train, y_test = train_test_split(X, y,test_size=test_size,random_state=random_seed)
         
         self.X_train = X_train
         self.X_test = X_test
@@ -86,18 +86,20 @@ class MLModelsEstimation:
 
 class MLModelsCV:
     
-    def __init__(self, X,y, test_size):
+    def __init__(self, X,y,test_size,random_seed=87):
         
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=random_seed)
         
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
+        self.random_seed = random_seed
 
     def OLS(self, trial):
     
-        params = {'fit_intercept':trial.suggest_categorical('fit_intercept',[True,False])}
+        params = {'fit_intercept':trial.suggest_categorical('fit_intercept',[True,False]),
+                  'random_state':self.random_seed}
         
         mod = linear_model.LinearRegression(**params)
         mod.fit(self.X_train,self.y_train)
@@ -111,7 +113,8 @@ class MLModelsCV:
         
         params = {'fit_intercept':trial.suggest_categorical('fit_intercept',[True,False]),
                   'penalty':trial.suggest_categorical('penalty',[None,'l2']),
-                  'C'      :trial.suggest_float('C',0,5)}
+                  'C'      :trial.suggest_float('C',0,5),
+                  'random_state':self.random_seed}
         
         mod = linear_model.LogisticRegression( **params)
         mod.fit(self.X_train,self.y_train)
@@ -124,7 +127,8 @@ class MLModelsCV:
     def SVM(self,trial):
     
         params = {'kernel':'linear',
-                  'C':trial.suggest_float('C',0,5)}
+                  'C':trial.suggest_float('C',0,5),
+                  'random_state':self.random_seed}
 
         mod = svm.SVR(**params)
         mod.fit(self.X_train,self.y_train)
@@ -139,7 +143,8 @@ class MLModelsCV:
         params = {'n_estimators':trial.suggest_int('n_estimators',50,200),
                   'max_depth':trial.suggest_categorical('max_depth',[None,100,200]),
                   'min_samples_leaf':trial.suggest_int('min_samples_leaf',2,5),
-                  'max_features':trial.suggest_int('max_features',1,3)}
+                  'max_features':trial.suggest_int('max_features',1,3),
+                  'random_state':self.random_seed}
 
         mod = ensemble.RandomForestRegressor(**params)
         mod.fit(self.X_train,self.y_train)
@@ -158,7 +163,8 @@ class MLModelsCV:
         "lambda": trial.suggest_float("lambda", 1e-8, 1.0, log=True),
         "alpha": trial.suggest_float("alpha", 1e-8, 1.0, log=True),
         "subsample": trial.suggest_float("subsample", 0.2, 1.0),
-        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.2, 1.0)}
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.2, 1.0),
+        'random_state':self.random_seed}
 
         if params["booster"] in ["gbtree", "dart"]:
             params["max_depth"] = trial.suggest_int("max_depth", 3, 9, step=2)
@@ -188,7 +194,8 @@ class MLModelsCV:
                   "max_depth": trial.suggest_int("max_depth", 2, 10),
                   "num_parallel_tree": trial.suggest_int("num_parallel_tree", 50, 150),
                   "objective": "binary:logistic",
-                  "device": "cuda"}
+                  "device": "cuda",
+                  'random_state':self.random_seed}
 
         mod = xgboost.XGBRFRegressor(**params)
         mod.fit(self.X_train,self.y_train)
@@ -202,7 +209,8 @@ class MLModelsCV:
         
         params = {"learning_rate": trial.suggest_float("learning_rate", 0.1, 1, log=True),
                   "depth": trial.suggest_int("depth", 2, 10),
-                  'silent':True}
+                  'silent':True,
+                  'random_state':self.random_seed}
 
         mod = catboost.CatBoostRegressor(**params)
         mod.fit(self.X_train,self.y_train)

@@ -16,3 +16,7 @@ descartes==1.1.0
 shapely==1.8.1
 FRB==1.1.4
 joblib==1.4.2
+xgboost==2.0.3
+catboost==1.2.5
+optuna==3.6.1
+shap=0.45.1

@@ -5,9 +5,11 @@ Created on Fri May 24 22:14:40 2024
 @author: lfval
 """
 
+import shap
 import pickle
 import pandas as pd
 from tqdm import tqdm
+from MLModel import MLModelsEstimation,MLModelsCV
 from statsmodels.discrete.discrete_model import Probit
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -21,7 +23,7 @@ def importEstimationDataset(path):
         
     # Now dropping unuseful variables such as fipscode & state
     for d in data_dict:
-        to_exc_cols = ['fipscode','state','industry']
+        to_exc_cols = ['fipscode','state','industry','ind_weight']
         data_dict[d] = data_dict[d].drop(to_exc_cols,axis=1,errors='ignore')
         
     return data_dict
@@ -54,6 +56,20 @@ def retLatexProbitEst(probit_res,year):
     
     return lat_str
 
+def modelOptimizationYear(data_dict,year,model_list):
+    year_data = data_dict[year]
+    X = year_data.drop('lf_status',axis=1)
+    y = year_data['lf_status']
+
+    mlmodelcv = MLModelsCV(X,y,0.3)
+    opt_params = {}
+    
+    for mod in model_list:
+        temp_opt_params = mlmodelcv.optimizeOptuna(method_name=mod)
+        opt_params.update({mod:temp_opt_params})
+    
+    return opt_params
+
 if __name__ == '__main__':
     path = r'C:/Users/lfval/OneDrive\Documentos\FGV\Monografia\DeterminantsofParticipation'
     data_dict = importEstimationDataset(path)
@@ -69,7 +85,15 @@ if __name__ == '__main__':
             del probit
    
     lat_str = retLatexProbitEst(probit_res,2023)    
-        
-
-    # probit = Probit(data_dict[2023]['lf_status'],data_dict[2023].drop('lf_status',axis=1)).fit(maxiter=200)
-    # probit.summary()
+    
+    # Run hyperparameters tunned versions of the models
+    model_list = ['Logit','RandomForestRegressor','XGBoost','XGBoostRF','CatBoost']
+    modelOptimizationYear(data_dict,)
+    
+    estimator = MLModelsEstimation(X, y, 0.3)
+    est = estimator.Logit(temp_opt_params)
+    
+    X100 = shap.utils.sample(X, 100)
+    explainer_xgb = shap.Explainer(est, X100)
+    shap_values_xgb = explainer_xgb(X)
+    shap.plots.waterfall(shap_values_xgb[20], max_display=12)
