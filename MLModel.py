@@ -14,13 +14,32 @@ import numpy as np
 from sklearn import svm
 from sklearn import linear_model
 from sklearn import ensemble
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score, train_test_split, KFold, cross_validate
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score
 import xgboost
 import catboost
 import optuna
 import time
 
+# Defining auxiliary functions
+
+def _accuracy(estimator, X, y):
+    predictions = estimator.predict(X)
+    rounded_predictions = np.where(predictions > 0.5, 1, 0)
+    return accuracy_score(y, rounded_predictions)
+
+def _cfs_matrix(estimator, X, y):
+    predictions = estimator.predict(X)
+    rounded_predictions = np.where(predictions > 0.5, 1, 0)
+    cm = confusion_matrix(y, rounded_predictions)
+    return {'tn': cm[0, 0]/len(X.index), 'fp': cm[0, 1]/len(X.index),
+            'fn': cm[1, 0]/len(X.index), 'tp': cm[1, 1]/len(X.index)}
+
+def _auc_roc(estimator, X, y):
+    predictions = estimator.predict(X)
+    rounded_predictions = np.where(predictions > 0.5, 1, 0)
+    roc_auc = roc_auc_score(y, rounded_predictions)
+    return roc_auc
 
 
 class MLModelsEstimation:
@@ -105,9 +124,9 @@ class MLModelsCV:
         mod.fit(self.X_train,self.y_train)
 
         preds = mod.predict(self.X_test)
-        mse = mean_squared_error(self.y_test, preds)
+        auc = roc_auc_score(self.y_test, preds)
         
-        return mse
+        return auc
     
     def Logit(self,trial):
         
@@ -120,9 +139,9 @@ class MLModelsCV:
         mod.fit(self.X_train,self.y_train)
 
         preds = mod.predict(self.X_test)
-        mse = mean_squared_error(self.y_test, preds)
+        auc = roc_auc_score(self.y_test, preds)
         
-        return mse
+        return auc
     
     def SVM(self,trial):
     
@@ -134,9 +153,9 @@ class MLModelsCV:
         mod.fit(self.X_train,self.y_train)
 
         preds = mod.predict(self.X_test)
-        mse = mean_squared_error(self.y_test, preds)
+        auc = roc_auc_score(self.y_test, preds)
         
-        return mse
+        return auc
     
     def RandomForestRegressor(self,trial):
         
@@ -150,9 +169,9 @@ class MLModelsCV:
         mod.fit(self.X_train,self.y_train)
 
         preds = mod.predict(self.X_test)
-        mse = mean_squared_error(self.y_test, preds)
+        auc = roc_auc_score(self.y_test, preds)
         
-        return mse
+        return auc
     
     def XGBoost(self, trial):
         
@@ -183,9 +202,9 @@ class MLModelsCV:
         mod.fit(self.X_train,self.y_train)
 
         preds = mod.predict(self.X_test)
-        mse = mean_squared_error(self.y_test, preds)
+        auc = roc_auc_score(self.y_test, preds)
         
-        return mse
+        return auc
     
     def XGBoostRF(self, trial):
         
@@ -201,9 +220,9 @@ class MLModelsCV:
         mod.fit(self.X_train,self.y_train)
 
         preds = mod.predict(self.X_test)
-        mse = mean_squared_error(self.y_test, preds)
+        auc = roc_auc_score(self.y_test, preds)
         
-        return mse
+        return auc
     
     def CatBoost(self, trial):
         
@@ -216,23 +235,129 @@ class MLModelsCV:
         mod.fit(self.X_train,self.y_train)
 
         preds = mod.predict(self.X_test)
-        mse = mean_squared_error(self.y_test, preds)
+        auc = roc_auc_score(self.y_test, preds)
         
-        return mse
+        return auc
     
     def optimizeOptuna(self, method_name, n_trials=100, timeout=600):
         
         method = getattr(self, method_name)
 
         start = time.time()
-        study = optuna.create_study(direction="minimize")
+        study = optuna.create_study(direction="maximize")
         study.optimize(method, n_trials=100, timeout=600)
         
         print('')
         print('Best parameters: ', study.best_params)
-        print('Best MSE: ', study.best_value)
+        print('Best AUC: ', study.best_value)
         print(f'Time elapsed: {time.time()-start}s')
         
         best_params = study.best_params
         
         return best_params
+    
+class MLModelsKFoldCV:
+    
+    def __init__(self,X,y,n_folds,random_seed=87):
+        
+        self.X = X
+        self.y = y
+        self.n_folds = n_folds
+
+    def OLS(self, params):
+    
+        mod = linear_model.LinearRegression(**params)
+        
+        accuracy   = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_accuracy)
+        cfs_matrix = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_cfs_matrix)
+        roc_auc    = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_auc_roc)
+
+        kfold_cv_res = {'accuracy':accuracy,
+                        'cfs_matrix':cfs_matrix,
+                        'roc_auc':roc_auc}
+
+        return kfold_cv_res
+    
+    def Logit(self,params):
+
+        mod = linear_model.LogisticRegression( **params)
+        
+        accuracy   = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_accuracy)
+        cfs_matrix = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_cfs_matrix)
+        roc_auc    = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_auc_roc)
+
+        kfold_cv_res = {'accuracy':accuracy,
+                        'cfs_matrix':cfs_matrix,
+                        'roc_auc':roc_auc}
+
+        return kfold_cv_res
+    
+    def SVM(self,params):
+
+        mod = svm.SVR(**params)
+        
+        accuracy   = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_accuracy)
+        cfs_matrix = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_cfs_matrix)
+        roc_auc    = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_auc_roc)
+
+        kfold_cv_res = {'accuracy':accuracy,
+                        'cfs_matrix':cfs_matrix,
+                        'roc_auc':roc_auc}
+
+        return kfold_cv_res
+    
+    def RandomForestRegressor(self,params):
+
+        mod = ensemble.RandomForestRegressor(**params)
+        
+        accuracy   = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_accuracy)
+        cfs_matrix = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_cfs_matrix)
+        roc_auc    = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_auc_roc)
+
+        kfold_cv_res = {'accuracy':accuracy,
+                        'cfs_matrix':cfs_matrix,
+                        'roc_auc':roc_auc}
+
+        return kfold_cv_res
+    
+    def XGBoost(self, params):
+        
+        mod = xgboost.XGBRegressor(**params)
+        
+        accuracy   = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_accuracy)
+        cfs_matrix = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_cfs_matrix)
+        roc_auc    = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_auc_roc)
+
+        kfold_cv_res = {'accuracy':accuracy,
+                        'cfs_matrix':cfs_matrix,
+                        'roc_auc':roc_auc}
+
+        return kfold_cv_res
+    
+    def XGBoostRF(self, params):
+
+        mod = xgboost.XGBRFRegressor(**params)
+        
+        accuracy   = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_accuracy)
+        cfs_matrix = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_cfs_matrix)
+        roc_auc    = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_auc_roc)
+
+        kfold_cv_res = {'accuracy':accuracy,
+                        'cfs_matrix':cfs_matrix,
+                        'roc_auc':roc_auc}
+
+        return kfold_cv_res
+    
+    def CatBoost(self, params):
+
+        mod = catboost.CatBoostRegressor(**params)
+        
+        accuracy   = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_accuracy)
+        cfs_matrix = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_cfs_matrix)
+        roc_auc    = cross_validate(mod, self.X, self.y, cv=self.n_folds,scoring=_auc_roc)
+
+        kfold_cv_res = {'accuracy':accuracy,
+                        'cfs_matrix':cfs_matrix,
+                        'roc_auc':roc_auc}
+
+        return kfold_cv_res
